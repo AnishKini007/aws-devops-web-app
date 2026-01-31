@@ -290,30 +290,25 @@ spec:
 
         stage('Get Application URL') {
             steps {
-                container('kubectl') {
+                container('helm') {
                     script {
-                        echo "Getting application URL..."
-                        def ingressHost = sh(
-                            script: """
-                                kubectl get ingress ${HELM_RELEASE_NAME} \\
-                                    -n ${HELM_NAMESPACE} \\
-                                    -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
-                            """,
+                        echo "Getting application URL from Helm status..."
+                        def helmStatus = sh(
+                            script: "helm status ${HELM_RELEASE_NAME} -n ${HELM_NAMESPACE} -o json",
                             returnStdout: true
                         ).trim()
                         
-                        if (ingressHost) {
-                            echo """
+                        echo """
 ========================================
-Application deployed successfully!
-URL: http://${ingressHost}
+✅ Application deployed successfully!
 Version: ${IMAGE_TAG}
+Namespace: ${HELM_NAMESPACE}
+Release: ${HELM_RELEASE_NAME}
+
+To get the ALB URL, run:
+kubectl get ingress ${HELM_RELEASE_NAME} -n ${HELM_NAMESPACE}
 ========================================
-                            """
-                        } else {
-                            echo "Warning: Ingress hostname not yet available. Check later with:"
-                            echo "kubectl get ingress ${HELM_RELEASE_NAME} -n ${HELM_NAMESPACE}"
-                        }
+                        """
                     }
                 }
             }
