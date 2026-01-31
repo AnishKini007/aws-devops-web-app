@@ -17,9 +17,9 @@ RUN npm ci --only=production
 # Stage 2: Runtime stage
 FROM node:18-alpine
 
-# Create non-root user for security
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser
+# Create non-root user for security (use different GID to avoid conflicts)
+RUN addgroup -g 1001 appuser && \
+    adduser -D -u 1001 -G appuser appuser
 
 WORKDIR /app
 
