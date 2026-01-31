@@ -1,0 +1,284 @@
+// ========================================
+// Production-Grade Jenkinsfile
+// ========================================
+// This pipeline:
+// 1. Builds and tests the application
+// 2. Builds and pushes Docker image to ECR
+// 3. Deploys to EKS using Helm with rolling update
+
+pipeline {
+    agent {
+        // Use Kubernetes pod template defined in Jenkins
+        kubernetes {
+            yaml '''
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    jenkins: agent
+spec:
+  serviceAccountName: jenkins
+  containers:
+  - name: node
+    image: node:18-alpine
+    command:
+    - cat
+    tty: true
+  - name: docker
+    image: docker:24-dind
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - name: docker-sock
+      mountPath: /var/run
+  - name: aws-cli
+    image: amazon/aws-cli:latest
+    command:
+    - cat
+    tty: true
+  - name: kubectl
+    image: bitnami/kubectl:latest
+    command:
+    - cat
+    tty: true
+  - name: helm
+    image: alpine/helm:latest
+    command:
+    - cat
+    tty: true
+  volumes:
+  - name: docker-sock
+    emptyDir: {}
+'''
+        }
+    }
+
+    environment {
+        // AWS and ECR configuration
+        AWS_ACCOUNT_ID = '975050192962'
+        AWS_REGION = 'ap-south-1'
+        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECR_REPOSITORY = 'eks-cicd-app'
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
+        
+        // EKS configuration
+        EKS_CLUSTER_NAME = 'eks-cicd-cluster'
+        
+        // Helm configuration
+        HELM_RELEASE_NAME = 'eks-cicd-app'
+        HELM_NAMESPACE = 'default'
+        
+        // Application version
+        APP_VERSION = "${env.BUILD_NUMBER}"
+    }
+
+    options {
+        // Build options
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timestamps()
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                script {
+                    echo "Checking out source code..."
+                    checkout scm
+                }
+            }
+        }
+
+        stage('Build & Test') {
+            steps {
+                container('node') {
+                    script {
+                        echo "Installing dependencies..."
+                        dir('app') {
+                            sh 'npm ci'
+                            
+                            echo "Running linter..."
+                            sh 'npm run lint || true'
+                            
+                            echo "Running tests..."
+                            sh 'npm test'
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                container('docker') {
+                    script {
+                        echo "Building Docker image..."
+                        dir('app') {
+                            sh """
+                                docker build -t ${ECR_REPOSITORY}:${IMAGE_TAG} .
+                                docker tag ${ECR_REPOSITORY}:${IMAGE_TAG} ${ECR_REPOSITORY}:latest
+                            """
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Push to ECR') {
+            steps {
+                container('aws-cli') {
+                    script {
+                        echo "Logging in to Amazon ECR..."
+                        sh """
+                            aws ecr get-login-password --region ${AWS_REGION} | \\
+                            docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                        """
+                    }
+                }
+                
+                container('docker') {
+                    script {
+                        echo "Pushing image to ECR..."
+                        sh """
+                            docker tag ${ECR_REPOSITORY}:${IMAGE_TAG} ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
+                            docker tag ${ECR_REPOSITORY}:latest ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest
+                            
+                            docker push ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
+                            docker push ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest
+                        """
+                        
+                        echo "Image pushed: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+                    }
+                }
+            }
+        }
+
+        stage('Update kubeconfig') {
+            steps {
+                container('aws-cli') {
+                    script {
+                        echo "Configuring kubectl for EKS..."
+                        sh """
+                            aws eks update-kubeconfig \\
+                                --region ${AWS_REGION} \\
+                                --name ${EKS_CLUSTER_NAME}
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Deploy with Helm') {
+            steps {
+                container('helm') {
+                    script {
+                        echo "Deploying application with Helm..."
+                        
+                        dir('helm/app') {
+                            // Check if release exists
+                            def releaseExists = sh(
+                                script: "helm list -n ${HELM_NAMESPACE} | grep ${HELM_RELEASE_NAME} || true",
+                                returnStdout: true
+                            ).trim()
+                            
+                            if (releaseExists) {
+                                echo "Upgrading existing Helm release..."
+                                sh """
+                                    helm upgrade ${HELM_RELEASE_NAME} . \\
+                                        --namespace ${HELM_NAMESPACE} \\
+                                        --set image.repository=${ECR_REGISTRY}/${ECR_REPOSITORY} \\
+                                        --set image.tag=${IMAGE_TAG} \\
+                                        --set env[0].value=${APP_VERSION} \\
+                                        --wait \\
+                                        --timeout 5m \\
+                                        --atomic
+                                """
+                            } else {
+                                echo "Installing new Helm release..."
+                                sh """
+                                    helm install ${HELM_RELEASE_NAME} . \\
+                                        --namespace ${HELM_NAMESPACE} \\
+                                        --create-namespace \\
+                                        --set image.repository=${ECR_REGISTRY}/${ECR_REPOSITORY} \\
+                                        --set image.tag=${IMAGE_TAG} \\
+                                        --set env[0].value=${APP_VERSION} \\
+                                        --wait \\
+                                        --timeout 5m
+                                """
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                container('kubectl') {
+                    script {
+                        echo "Verifying deployment..."
+                        sh """
+                            kubectl get deployment ${HELM_RELEASE_NAME} -n ${HELM_NAMESPACE}
+                            kubectl get pods -n ${HELM_NAMESPACE} -l app.kubernetes.io/name=${HELM_RELEASE_NAME}
+                            kubectl get ingress -n ${HELM_NAMESPACE}
+                        """
+                        
+                        // Wait for rollout to complete
+                        sh """
+                            kubectl rollout status deployment/${HELM_RELEASE_NAME} \\
+                                -n ${HELM_NAMESPACE} \\
+                                --timeout=5m
+                        """
+                        
+                        echo "✅ Deployment successful!"
+                    }
+                }
+            }
+        }
+
+        stage('Get Application URL') {
+            steps {
+                container('kubectl') {
+                    script {
+                        echo "Getting application URL..."
+                        def ingressHost = sh(
+                            script: """
+                                kubectl get ingress ${HELM_RELEASE_NAME} \\
+                                    -n ${HELM_NAMESPACE} \\
+                                    -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        if (ingressHost) {
+                            echo """
+========================================
+Application deployed successfully!
+URL: http://${ingressHost}
+Version: ${IMAGE_TAG}
+========================================
+                            """
+                        } else {
+                            echo "Warning: Ingress hostname not yet available. Check later with:"
+                            echo "kubectl get ingress ${HELM_RELEASE_NAME} -n ${HELM_NAMESPACE}"
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '✅ Pipeline completed successfully!'
+        }
+        failure {
+            echo '❌ Pipeline failed!'
+        }
+        always {
+            echo 'Cleaning up...'
+            // Add cleanup steps if needed
+        }
+    }
+}

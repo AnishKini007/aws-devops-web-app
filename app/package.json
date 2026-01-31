@@ -1,0 +1,17 @@
+{
+  "name": "eks-cicd-app",
+  "version": "1.0.0",
+  "description": "Sample web application for EKS CI/CD demo",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "echo \"Running tests...\" && exit 0",
+    "lint": "echo \"Running linter...\" && exit 0"
+  },
+  "keywords": ["eks", "kubernetes", "nodejs", "cicd"],
+  "author": "DevOps Team",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

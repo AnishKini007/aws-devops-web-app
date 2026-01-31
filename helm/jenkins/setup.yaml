@@ -1,0 +1,74 @@
+# ========================================
+# Kubernetes Manifests for Jenkins Setup
+# ========================================
+# This file contains Kubernetes resources that must be created
+# before deploying Jenkins with Helm
+
+---
+# Namespace for Jenkins
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jenkins
+  labels:
+    name: jenkins
+    app: jenkins
+
+---
+# Service Account for Jenkins (with IRSA annotation)
+# Note: Helm chart will create this, but we define it here for clarity
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jenkins
+  namespace: jenkins
+  annotations:
+    # Replace ACCOUNT_ID and REGION with actual values from Terraform output
+    eks.amazonaws.com/role-arn: arn:aws:iam::975050192962:role/eks-cicd-cluster-jenkins-sa-role
+  labels:
+    app: jenkins
+
+---
+# StorageClass for Jenkins persistent volume (GP3 for better performance)
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  iops: "3000"
+  throughput: "125"
+  encrypted: "true"
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+reclaimPolicy: Delete
+
+---
+# Secret for Jenkins admin password
+# Generate password: openssl rand -base64 32
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jenkins-admin-secret
+  namespace: jenkins
+type: Opaque
+stringData:
+  jenkins-admin-password: "CHANGE_ME_PLEASE"  # Replace with secure password
+  # Or use AWS Secrets Manager/SSM Parameter Store via External Secrets Operator
+
+---
+# ConfigMap for additional Jenkins configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jenkins-config
+  namespace: jenkins
+data:
+  # Additional configuration files can be added here
+  apply_config.yaml: |
+    # Jenkins configuration as code
+    jenkins:
+      systemMessage: "Jenkins CI/CD Platform on EKS"

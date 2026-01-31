@@ -1,0 +1,17 @@
+# ========================================
+# Application Helm Chart
+# ========================================
+apiVersion: v2
+name: eks-cicd-app
+description: A sample web application deployed on EKS
+type: application
+version: 1.0.0  # Chart version
+appVersion: "1.0.0"  # Application version
+keywords:
+  - eks
+  - kubernetes
+  - cicd
+  - web-app
+maintainers:
+  - name: DevOps Team
+    email: devops@example.com

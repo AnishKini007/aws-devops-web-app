@@ -1,0 +1,168 @@
+# ========================================
+# Application Helm Chart Values
+# ========================================
+
+# Application metadata
+nameOverride: ""
+fullnameOverride: ""
+
+# Deployment replicas
+replicaCount: 2
+
+# Container image configuration
+image:
+  repository: ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/eks-cicd-app
+  pullPolicy: IfNotPresent
+  tag: "latest"  # Will be overridden by Jenkins with build number
+
+# Image pull secrets (not needed with IRSA)
+imagePullSecrets: []
+
+# Service account configuration (with IRSA)
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::975050192962:role/eks-cicd-cluster-app-sa-role"
+  name: "app-sa"
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+  annotations: {}
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: "alb"
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/success-codes: "200"
+    # For HTTPS:
+    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:region:account:certificate/xxx
+    # alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
+  hosts:
+    - host: ""  # Add your domain or leave empty for ALB DNS
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Resource requests and limits
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Horizontal Pod Autoscaler
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Liveness probe
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 3
+
+# Readiness probe
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  successThreshold: 1
+  failureThreshold: 3
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity rules
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - eks-cicd-app
+          topologyKey: kubernetes.io/hostname
+
+# Environment variables
+env:
+  - name: APP_ENV
+    value: "production"
+  - name: LOG_LEVEL
+    value: "info"
+
+# ConfigMap for application configuration
+configMap:
+  enabled: false
+  data: {}
+
+# Secrets (use AWS Secrets Manager with External Secrets Operator in production)
+secrets:
+  enabled: false
+  data: {}
+
+# Service Monitor for Prometheus
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  path: /metrics
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Rolling update strategy
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0

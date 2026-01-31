@@ -1,0 +1,192 @@
+# ========================================
+# Jenkins Helm Values - Production Configuration
+# ========================================
+# This file configures Jenkins deployment on EKS using the official Helm chart
+# Chart: https://github.com/jenkinsci/helm-charts/tree/main/charts/jenkins
+
+controller:
+  # Jenkins controller (master) configuration
+  componentName: "jenkins-controller"
+  
+  # Image configuration
+  image:
+    registry: docker.io
+    repository: jenkins/jenkins
+    tag: lts-jdk17
+    pullPolicy: IfNotPresent
+
+  # Resources for Jenkins controller pod
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"
+
+  # Java options for Jenkins
+  javaOpts: "-Xms1024m -Xmx2048m"
+  
+  # Service account with IRSA (IAM Role for Service Account)
+  serviceAccount:
+    create: true
+    name: jenkins
+    annotations:
+      # This annotation enables IRSA - Replace with actual role ARN from Terraform output
+      eks.amazonaws.com/role-arn: "arn:aws:iam::975050192962:role/eks-cicd-cluster-jenkins-sa-role"
+
+  # Ingress configuration for Jenkins UI
+  ingress:
+    enabled: true
+    apiVersion: "networking.k8s.io/v1"
+    annotations:
+      # AWS Load Balancer Controller annotations
+      kubernetes.io/ingress.class: alb
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+      # For HTTPS, add:
+      # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:region:account:certificate/xxx
+      # alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
+      alb.ingress.kubernetes.io/healthcheck-path: /login
+      alb.ingress.kubernetes.io/success-codes: '200'
+    ingressClassName: alb
+    path: /
+    pathType: Prefix
+    hostName: # Add your domain here if you have one
+
+  # Install default plugins - using "latest" or removing version to auto-resolve dependencies
+  installPlugins:
+    - kubernetes:latest  # Kubernetes plugin for dynamic agents
+    - workflow-aggregator:latest  # Pipeline plugin
+    - git:latest  # Git plugin
+    - configuration-as-code:latest  # JCasC plugin
+    - docker-workflow:latest  # Docker pipeline plugin
+    - credentials-binding:latest  # Credentials plugin
+    - github-branch-source:latest  # GitHub integration
+    - prometheus:latest  # Metrics for monitoring
+
+  # Additional plugins (optional)
+  additionalPlugins: []
+
+  # Enable CSRF protection
+  csrf:
+    defaultCrumbIssuer:
+      enabled: true
+      proxyCompatability: true
+
+  # Number of executors on the controller (set to 0 to run all jobs on agents)
+  numExecutors: 0
+
+  # Jenkins Configuration as Code (JCasC)
+  JCasC:
+    enabled: true
+    defaultConfig: true
+    configScripts:
+      welcome-message: |
+        jenkins:
+          systemMessage: "Welcome to Jenkins on EKS - CI/CD Platform"
+          
+      cloud-config: |
+        jenkins:
+          clouds:
+            - kubernetes:
+                name: "kubernetes"
+                serverUrl: "https://kubernetes.default"
+                namespace: "jenkins"
+                jenkinsUrl: "http://jenkins:8080"
+                jenkinsTunnel: "jenkins-agent:50000"
+                containerCapStr: "10"
+                maxRequestsPerHostStr: "32"
+                retentionTimeout: 5
+                connectTimeout: 60
+                readTimeout: 60
+                templates:
+                  - name: "jenkins-agent-pod"
+                    namespace: "jenkins"
+                    label: "jenkins-agent"
+                    nodeUsageMode: NORMAL
+                    containers:
+                      - name: "jnlp"
+                        image: "jenkins/inbound-agent:latest-jdk17"
+                        alwaysPullImage: true
+                        workingDir: "/home/jenkins/agent"
+                        ttyEnabled: true
+                        resourceRequestCpu: "500m"
+                        resourceRequestMemory: "512Mi"
+                        resourceLimitCpu: "1000m"
+                        resourceLimitMemory: "1Gi"
+                        envVars:
+                          - envVar:
+                              key: "JENKINS_URL"
+                              value: "http://jenkins:8080"
+                      - name: "docker"
+                        image: "docker:dind"
+                        privileged: true
+                        alwaysPullImage: false
+                        workingDir: "/home/jenkins/agent"
+                        ttyEnabled: true
+                        resourceRequestCpu: "500m"
+                        resourceRequestMemory: "512Mi"
+                        resourceLimitCpu: "1000m"
+                        resourceLimitMemory: "1Gi"
+                    volumes:
+                      - emptyDirVolume:
+                          memory: false
+                          mountPath: "/var/lib/docker"
+                    yamlMergeStrategy: "override"
+
+  # Security realm and authorization
+  securityRealm: |-
+    local:
+      allowsSignup: false
+      enableCaptcha: false
+      users:
+        - id: "admin"
+          name: "Admin"
+          password: "${JENKINS_ADMIN_PASSWORD}"
+
+  authorizationStrategy: |-
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+# Persistence for Jenkins data
+persistence:
+  enabled: true
+  existingClaim: false
+  storageClass: "gp3"  # AWS EBS GP3 storage class
+  accessMode: "ReadWriteOnce"
+  size: "20Gi"
+  annotations: {}
+
+# Agent listener service (for JNLP agents)
+agent:
+  enabled: true
+  defaultsProviderTemplate: ""
+  jenkinsUrl: ""
+  jenkinsTunnel: ""
+  kubernetesConnectTimeout: 5
+  kubernetesReadTimeout: 15
+  maxRequestsPerHostStr: "32"
+  namespace: "jenkins"
+  image:
+    repository: "jenkins/inbound-agent"
+    tag: "latest-jdk17"
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+
+# Network policy (optional, for additional security)
+networkPolicy:
+  enabled: false
+  apiVersion: networking.k8s.io/v1
+
+# Service monitor for Prometheus
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
