@@ -133,8 +133,7 @@ spec:
                     script {
                         echo "Installing AWS CLI..."
                         sh '''
-                            apk add --no-cache python3 py3-pip
-                            pip3 install --upgrade awscli
+                            apk add --no-cache aws-cli
                         '''
                         
                         echo "Logging in to Amazon ECR..."
