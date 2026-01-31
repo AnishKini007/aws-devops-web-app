@@ -242,7 +242,6 @@ spec:
                                         --namespace ${HELM_NAMESPACE} \\
                                         --set image.repository=${ECR_REGISTRY}/${ECR_REPOSITORY} \\
                                         --set image.tag=${IMAGE_TAG} \\
-                                        --set env[0].value=${APP_VERSION} \\
                                         --wait \\
                                         --timeout 5m \\
                                         --atomic
@@ -255,7 +254,6 @@ spec:
                                         --create-namespace \\
                                         --set image.repository=${ECR_REGISTRY}/${ECR_REPOSITORY} \\
                                         --set image.tag=${IMAGE_TAG} \\
-                                        --set env[0].value=${APP_VERSION} \\
                                         --wait \\
                                         --timeout 5m
                                 """
