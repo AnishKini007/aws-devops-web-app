@@ -31,9 +31,16 @@ spec:
     env:
     - name: AWS_REGION
       value: ap-south-1
+    - name: AWS_ROLE_ARN
+      value: arn:aws:iam::975050192962:role/eks-cicd-cluster-jenkins-sa-role
+    - name: AWS_WEB_IDENTITY_TOKEN_FILE
+      value: /var/run/secrets/eks.amazonaws.com/serviceaccount/token
     volumeMounts:
     - name: docker-sock
       mountPath: /var/run
+    - name: aws-iam-token
+      mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
+      readOnly: true
   - name: aws-cli
     image: amazon/aws-cli:latest
     command:
@@ -52,6 +59,13 @@ spec:
   volumes:
   - name: docker-sock
     emptyDir: {}
+  - name: aws-iam-token
+    projected:
+      sources:
+      - serviceAccountToken:
+          path: token
+          expirationSeconds: 86400
+          audience: sts.amazonaws.com
 '''
         }
     }
