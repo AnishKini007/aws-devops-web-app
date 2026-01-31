@@ -151,7 +151,7 @@ secrets:
 
 # Service Monitor for Prometheus
 serviceMonitor:
-  enabled: true
+  enabled: false  # Disable until Prometheus Operator is installed
   interval: 30s
   path: /metrics
 

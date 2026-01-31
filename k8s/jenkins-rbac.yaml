@@ -1,0 +1,66 @@
+# ========================================
+# RBAC for Jenkins Service Account
+# ========================================
+# Grants Jenkins permissions to deploy applications to all namespaces
+
+---
+# ClusterRole for Jenkins to deploy applications
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: jenkins-deployer
+rules:
+  # Manage deployments, services, pods
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  
+  # Manage core resources
+  - apiGroups: [""]
+    resources: ["pods", "services", "configmaps", "secrets", "serviceaccounts", "persistentvolumeclaims", "namespaces"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  
+  # Pod logs and exec
+  - apiGroups: [""]
+    resources: ["pods/log", "pods/exec"]
+    verbs: ["get", "list", "create"]
+  
+  # Manage ingress
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  
+  # Manage HPA
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  
+  # Manage PDB
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  
+  # Manage RBAC
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  
+  # Manage batch jobs
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+---
+# ClusterRoleBinding for Jenkins
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jenkins-deployer-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: jenkins-deployer
+subjects:
+  - kind: ServiceAccount
+    name: jenkins
+    namespace: jenkins

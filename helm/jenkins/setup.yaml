@@ -56,7 +56,7 @@ metadata:
   namespace: jenkins
 type: Opaque
 stringData:
-  jenkins-admin-password: "CHANGE_ME_PLEASE"  # Replace with secure password
+  jenkins-admin-password: "DedSec007"  # Replace with secure password
   # Or use AWS Secrets Manager/SSM Parameter Store via External Secrets Operator
 
 ---
@@ -72,3 +72,49 @@ data:
     # Jenkins configuration as code
     jenkins:
       systemMessage: "Jenkins CI/CD Platform on EKS"
+
+---
+# ClusterRole for Jenkins to deploy applications
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: jenkins-deployer
+rules:
+  # Manage deployments, services, pods
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "services", "configmaps", "secrets", "serviceaccounts", "persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Manage ingress
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Manage HPA
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Manage PDB
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Manage RBAC
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+---
+# ClusterRoleBinding for Jenkins
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jenkins-deployer-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: jenkins-deployer
+subjects:
+  - kind: ServiceAccount
+    name: jenkins
+    namespace: jenkins
