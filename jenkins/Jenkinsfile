@@ -95,7 +95,7 @@ spec:
                     script {
                         echo "Installing dependencies..."
                         dir('app') {
-                            sh 'npm ci'
+                            sh 'npm install'
                             
                             echo "Running linter..."
                             sh 'npm run lint || true'
