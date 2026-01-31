@@ -46,16 +46,49 @@ spec:
     command:
     - cat
     tty: true
+    env:
+    - name: AWS_REGION
+      value: ap-south-1
+    - name: AWS_ROLE_ARN
+      value: arn:aws:iam::975050192962:role/eks-cicd-cluster-jenkins-sa-role
+    - name: AWS_WEB_IDENTITY_TOKEN_FILE
+      value: /var/run/secrets/eks.amazonaws.com/serviceaccount/token
+    volumeMounts:
+    - name: aws-iam-token
+      mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
+      readOnly: true
   - name: kubectl
     image: bitnami/kubectl:latest
     command:
     - cat
     tty: true
+    env:
+    - name: AWS_REGION
+      value: ap-south-1
+    - name: AWS_ROLE_ARN
+      value: arn:aws:iam::975050192962:role/eks-cicd-cluster-jenkins-sa-role
+    - name: AWS_WEB_IDENTITY_TOKEN_FILE
+      value: /var/run/secrets/eks.amazonaws.com/serviceaccount/token
+    volumeMounts:
+    - name: aws-iam-token
+      mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
+      readOnly: true
   - name: helm
     image: alpine/helm:latest
     command:
     - cat
     tty: true
+    env:
+    - name: AWS_REGION
+      value: ap-south-1
+    - name: AWS_ROLE_ARN
+      value: arn:aws:iam::975050192962:role/eks-cicd-cluster-jenkins-sa-role
+    - name: AWS_WEB_IDENTITY_TOKEN_FILE
+      value: /var/run/secrets/eks.amazonaws.com/serviceaccount/token
+    volumeMounts:
+    - name: aws-iam-token
+      mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
+      readOnly: true
   volumes:
   - name: docker-sock
     emptyDir: {}
