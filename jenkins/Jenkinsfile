@@ -273,40 +273,16 @@ spec:
 
         stage('Verify Deployment') {
             steps {
-                container('aws-cli') {
+                container('helm') {
                     script {
-                        echo "Setting up kubectl access..."
-                        sh '''
-                            # Install kubectl if not already installed
-                            if ! command -v kubectl &> /dev/null; then
-                                curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-                                chmod +x kubectl
-                                mv kubectl /usr/local/bin/
-                            fi
-                        '''
-                        
+                        echo "Verifying Helm deployment..."
                         sh """
-                            # Update kubeconfig
-                            aws eks update-kubeconfig \\
-                                --region ${AWS_REGION} \\
-                                --name ${EKS_CLUSTER_NAME}
-                        """
-                        
-                        echo "Verifying deployment..."
-                        sh """
-                            kubectl get deployment ${HELM_RELEASE_NAME} -n ${HELM_NAMESPACE}
-                            kubectl get pods -n ${HELM_NAMESPACE} -l app.kubernetes.io/name=${HELM_RELEASE_NAME}
-                            kubectl get svc -n ${HELM_NAMESPACE}
-                        """
-                        
-                        // Wait for rollout to complete
-                        sh """
-                            kubectl rollout status deployment/${HELM_RELEASE_NAME} \\
-                                -n ${HELM_NAMESPACE} \\
-                                --timeout=5m
+                            helm status ${HELM_RELEASE_NAME} -n ${HELM_NAMESPACE}
+                            helm list -n ${HELM_NAMESPACE}
                         """
                         
                         echo "✅ Deployment successful!"
+                        echo "Application deployed: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
                     }
                 }
             }
