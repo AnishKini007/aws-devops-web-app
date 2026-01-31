@@ -266,7 +266,7 @@ spec:
 
         stage('Verify Deployment') {
             steps {
-                container('helm') {
+                container('aws-cli') {
                     script {
                         echo "Verifying deployment..."
                         sh """
