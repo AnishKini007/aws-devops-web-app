@@ -266,13 +266,13 @@ spec:
 
         stage('Verify Deployment') {
             steps {
-                container('kubectl') {
+                container('helm') {
                     script {
                         echo "Verifying deployment..."
                         sh """
                             kubectl get deployment ${HELM_RELEASE_NAME} -n ${HELM_NAMESPACE}
                             kubectl get pods -n ${HELM_NAMESPACE} -l app.kubernetes.io/name=${HELM_RELEASE_NAME}
-                            kubectl get ingress -n ${HELM_NAMESPACE}
+                            kubectl get svc -n ${HELM_NAMESPACE}
                         """
                         
                         // Wait for rollout to complete
